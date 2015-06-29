@@ -1,0 +1,126 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>fr.lteconsulting</groupId>
+	<artifactId>corouteme</artifactId>
+	<version>1.0-SNAPSHOT</version>
+	<packaging>jar</packaging>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<maven.compiler.target>1.8</maven.compiler.target>
+		<maven.compiler.source>1.8</maven.compiler.source>
+	</properties>
+
+	<name>corouteme</name>
+	<url>http://maven.apache.org</url>
+
+	<dependencies>
+		<dependency>
+			<groupId>co.paralleluniverse</groupId>
+			<artifactId>quasar-core</artifactId>
+			<version>0.7.0</version>
+			<classifier>jdk8</classifier>
+		</dependency>
+		<dependency>
+			<groupId>io.gatling</groupId>
+			<artifactId>jsr166e</artifactId>
+			<version>1.0</version>
+			<scope>compile</scope>
+		</dependency>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>3.8.1</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.offbynull.coroutines</groupId>
+			<artifactId>user</artifactId>
+			<version>1.1.0</version>
+		</dependency>
+	</dependencies>
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-antrun-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>instrument-classes</id>
+						<phase>compile</phase>
+						<configuration>
+							<tasks>
+								<property name="ant_classpath" refid="maven.dependency.classpath" />
+								<taskdef name="instrumentationTask"
+									classname="co.paralleluniverse.fibers.instrument.InstrumentationTask"
+									classpath="${ant_classpath}" />
+								<instrumentationTask verbose="true">
+									<fileset dir="${project.build.directory}/classes/"
+										includes="**/*.class" />
+								</instrumentationTask>
+							</tasks>
+						</configuration>
+						<goals>
+							<goal>run</goal>
+						</goals>
+					</execution>
+
+					<execution>
+						<id>instrument-test-classes</id>
+						<phase>test-compile</phase>
+						<configuration>
+							<tasks>
+								<property name="ant_classpath" refid="maven.dependency.classpath" />
+								<taskdef name="instrumentationTask"
+									classname="co.paralleluniverse.fibers.instrument.InstrumentationTask"
+									classpath="${ant_classpath}" />
+								<instrumentationTask verbose="true">
+									<fileset dir="${project.build.directory}/test-classes/"
+										includes="**/*.class" />
+								</instrumentationTask>
+							</tasks>
+						</configuration>
+						<goals>
+							<goal>run</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			
+			<plugin>
+				<groupId>com.offbynull.coroutines</groupId>
+				<artifactId>maven-plugin</artifactId>
+				<version>1.1.0</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>instrument</goal>
+							<goal>test-instrument</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<!-- Run with "mvn compile maven-dependency-plugin:properties exec:exec" -->
+				<version>1.3.2</version>
+				<configuration>
+					<workingDirectory>target/classes</workingDirectory>
+					<executable>java</executable>
+					<arguments>
+						<argument>-Dco.paralleluniverse.fibers.verifyInstrumentation=true</argument>
+						<argument>-Dco.paralleluniverse.fibers.disableAgentWarning</argument>
+						<argument>-classpath</argument>
+						<classpath />
+						<!-- Main class -->
+						<argument>fr.lteconsulting.App</argument>
+					</arguments>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>
