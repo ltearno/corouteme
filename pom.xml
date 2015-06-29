@@ -43,6 +43,21 @@
 	</dependencies>
 	<build>
 		<plugins>
+			
+			<plugin>
+				<groupId>com.offbynull.coroutines</groupId>
+				<artifactId>maven-plugin</artifactId>
+				<version>1.1.0</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>instrument</goal>
+<!-- 							<goal>test-instrument</goal> -->
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+			
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-antrun-plugin</artifactId>
@@ -86,20 +101,6 @@
 <!-- 							<goal>run</goal> -->
 <!-- 						</goals> -->
 <!-- 					</execution> -->
-				</executions>
-			</plugin>
-			
-			<plugin>
-				<groupId>com.offbynull.coroutines</groupId>
-				<artifactId>maven-plugin</artifactId>
-				<version>1.1.0</version>
-				<executions>
-					<execution>
-						<goals>
-							<goal>instrument</goal>
-<!-- 							<goal>test-instrument</goal> -->
-						</goals>
-					</execution>
 				</executions>
 			</plugin>
 			

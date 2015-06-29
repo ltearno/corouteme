@@ -37,7 +37,7 @@ public abstract class Spy
 
 	abstract protected void startUp();
 
-	abstract protected Object processMessage( SpyMessage message, SpyCaller spyCaller );
+	abstract protected Object processMessage( SpyMessage message, SpyCaller spyCaller, Continuation continuation, MessageProcessingContinuation messageProcessingContinuation );
 
 	public interface SpyCaller
 	{
@@ -96,11 +96,11 @@ public abstract class Spy
 
 				SpyCallerCoroutine spyCaller = new SpyCallerCoroutine();
 				spyCaller.continuation = continuation;
-				Object result = processMessage( message, spyCaller );
+				Object result = processMessage( message, spyCaller, continuation, MessageProcessingContinuation.this );
 
 				// now return something to the caller
 				Channel<Object> responseChannel = message.getResponseChannel();
-				log( "Finished processing message with result '"+result+"', sending answer to " + responseChannel );
+				log( "Finished processing message with result '" + result + "', sending answer to " + System.identityHashCode( responseChannel ) );
 				try
 				{
 					responseChannel.send( result );
@@ -125,8 +125,8 @@ public abstract class Spy
 			try
 			{
 				spy.msgChannel.send( new SpyMessage( methodName, parameters, waitingChannel ) );
-				log( "Suspending continuation..." + System.identityHashCode( continuation ) );
-				
+				log( "Suspending continuation..." + System.identityHashCode( continuation ) + " on wait for channel " + System.identityHashCode( waitingChannel ) );
+
 				continuation.suspend();
 
 				log( "Continuation resumed" + System.identityHashCode( continuation ) + " result is = " + receivedObject );
@@ -153,7 +153,7 @@ public abstract class Spy
 				waitingChannel = null;
 			}
 
-			//return null;
+			// return null;
 		}
 	}
 
@@ -175,7 +175,7 @@ public abstract class Spy
 		if( executing )
 			throw new RuntimeException( "already executing !" );
 		executing = true;
-		
+
 		log( "start message loop" );
 		startUp();
 
@@ -220,7 +220,9 @@ public abstract class Spy
 				return;
 			}
 
-			if( selected == actions.get( 0 ) )
+			log( "SELECTION ON CHANNEL " + System.identityHashCode( selected.port() ) );
+
+			if( (Object) selected.port() == (Object) msgChannel )
 			{
 				log( "RECEIVED A MESSAGE TO PROCESS " + selected.message() );
 
@@ -278,7 +280,7 @@ public abstract class Spy
 	{
 		msgChannel = Channels.newChannel( -1 );
 		fiber = new Fiber<Integer>( this::fiberExecution );
-		log( "fiber = " + fiber.getName() );
+		log( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
 
 		fiber.start();
 	}
