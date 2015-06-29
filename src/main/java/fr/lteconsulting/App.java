@@ -6,6 +6,7 @@ import co.paralleluniverse.fibers.Fiber;
 import co.paralleluniverse.strands.Strand;
 import co.paralleluniverse.strands.channels.Channel;
 import co.paralleluniverse.strands.channels.Channels;
+import co.paralleluniverse.strands.channels.ThreadReceivePort;
 
 import com.offbynull.coroutines.user.CoroutineRunner;
 
@@ -15,48 +16,60 @@ import com.offbynull.coroutines.user.CoroutineRunner;
  */
 public class App
 {
-	public static void main(String[] args)
+	public static void main( String[] args )
 	{
-		Spy spy = new Spy();
+		Spy master = new Spy( "master" );
+		master.start();
+
+		Spy spy = new Spy( "spy", master );
 		spy.start();
 
-		spy.send("toto", null);
-		try
-		{
-			Thread.sleep(1000);
-		}
-		catch (InterruptedException e1)
-		{
-			// TODO Gérer l'exception InterruptedException
-		}
+		Channel receive = spy.send( "toto", null );
 
-		System.out.println("fufub");
-
-		final Channel<Integer> ch = Channels.newChannel(0);
-
-      new Fiber<Void>(() -> {
-          for (int i = 0; i < 10; i++) {
-              Strand.sleep(100);
-              ch.send(i);
-          }
-          ch.close();
-      }).start();
+		ThreadReceivePort<Object> rp = new ThreadReceivePort<>( receive );
 
 		try
 		{
-			new Fiber<Void>(() -> {
+			Object object = rp.receive();
+			System.out.println( "====> RECEIVED " + object );
+		}
+		catch( InterruptedException e2 )
+		{
+			e2.printStackTrace();
+		}
+
+		// spy.send( "titi", null );
+		// spy.send( "tata", null );
+
+		System.out.println();
+		System.out.println( "fufub" );
+
+		final Channel<Integer> ch = Channels.newChannel( 0 );
+
+		new Fiber<Void>( ( ) -> {
+			for( int i = 0; i < 10; i++ )
+			{
+				Strand.sleep( 100 );
+				ch.send( i );
+			}
+			ch.close();
+		} ).start();
+
+		try
+		{
+			new Fiber<Void>( ( ) -> {
 				Integer x;
-				while ((x = ch.receive()) != null)
-					System.out.println("--> " + x);
-			}).start().join();
+				while( (x = ch.receive()) != null )
+					System.out.println( "--> " + x );
+			} ).start().join();
 		}
-		catch (ExecutionException | InterruptedException e)
+		catch( ExecutionException | InterruptedException e )
 		{
-			System.out.println("errrro");
+			System.out.println( "errrro" );
 		}
-      
-		System.out.println("Hello my worlds !");
-		CoroutineRunner r = new CoroutineRunner(new MyCoroutine());
+
+		System.out.println( "Hello my worlds !" );
+		CoroutineRunner r = new CoroutineRunner( new MyCoroutine() );
 		r.execute();
 		r.execute();
 		r.execute();
