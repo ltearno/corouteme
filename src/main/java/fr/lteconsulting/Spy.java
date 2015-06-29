@@ -25,15 +25,24 @@ import com.offbynull.coroutines.user.CoroutineRunner;
  * - un Channel de réception des messages - un getter d'interface nommée
  * (facades)
  */
-public class Spy
+public abstract class Spy
 {
 	private final String surname;
 
-	private final Channel<SpyMessage> msgChannel;
+	private Channel<SpyMessage> msgChannel;
 
-	private final Fiber<Integer> fiber;
+	private Fiber<Integer> fiber;
 
 	private final List<MessageProcessingContinuation> messageProcessings = new ArrayList<>();
+
+	abstract protected void startUp();
+
+	abstract protected Object processMessage( SpyMessage message, SpyCaller spyCaller );
+
+	public interface SpyCaller
+	{
+		Object callSpy( Spy spy, String methodName, Object[] parameters );
+	}
 
 	class MessageProcessingContinuation
 	{
@@ -66,6 +75,17 @@ public class Spy
 			return waitingChannel;
 		}
 
+		private class SpyCallerCoroutine implements SpyCaller
+		{
+			Continuation continuation;
+
+			@Override
+			public Object callSpy( Spy spy, String methodName, Object[] parameters )
+			{
+				return MessageProcessingContinuation.this.callSpy( continuation, spy, methodName, parameters );
+			}
+		}
+
 		private Coroutine coroutine = new Coroutine()
 		{
 			@Override
@@ -74,26 +94,23 @@ public class Spy
 				// Process the message
 				log( "Start of the continuation, processing message " + message );
 
-				if( anotherSpy != null )
-				{
-					log( "Calling another spy" );
-					callSpy( continuation, anotherSpy, "mainue", null );
-					log( "Another spy returned to us !!" );
-				}
+				SpyCallerCoroutine spyCaller = new SpyCallerCoroutine();
+				spyCaller.continuation = continuation;
+				Object result = processMessage( message, spyCaller );
 
 				// now return something to the caller
-				Channel responseChannel = message.getResponseChannel();
-				log( "Finished processing message, sending answer to " + responseChannel );
+				Channel<Object> responseChannel = message.getResponseChannel();
+				log( "Finished processing message with result '"+result+"', sending answer to " + responseChannel );
 				try
 				{
-					responseChannel.send( new String( "Salut ma poule " + Math.random() ) );
+					responseChannel.send( result );
 				}
 				catch( Exception e )
 				{
 					e.printStackTrace();
 				}
 				log( "Finished process message, REAL" );
-				
+
 				messageProcessings.remove( MessageProcessingContinuation.this );
 			}
 		};
@@ -109,30 +126,38 @@ public class Spy
 			{
 				spy.msgChannel.send( new SpyMessage( methodName, parameters, waitingChannel ) );
 				log( "Suspending continuation..." + System.identityHashCode( continuation ) );
+				
 				continuation.suspend();
+
 				log( "Continuation resumed" + System.identityHashCode( continuation ) + " result is = " + receivedObject );
 				Object result = receivedObject;
 
-				receivedObject = null;
-				waitingChannel.close();
-				waitingChannel = null;
-				
 				return result;
 			}
 			catch( SuspendExecution e )
 			{
+				log( e.getMessage() );
 				e.printStackTrace();
+				throw new RuntimeException( e );
 			}
 			catch( InterruptedException e )
 			{
+				log( e.getMessage() );
 				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
+			finally
+			{
+				receivedObject = null;
+				waitingChannel.close();
+				waitingChannel = null;
 			}
 
-			return null;
+			//return null;
 		}
 	}
 
-	private void log( String message )
+	protected void log( String message )
 	{
 		System.out.println( surname + " : " + message );
 	}
@@ -140,23 +165,20 @@ public class Spy
 	public Spy( String surname )
 	{
 		this.surname = surname;
-
-		msgChannel = Channels.newChannel( -1 );
-		fiber = new Fiber<Integer>( this::fiberExecution );
-
-		log( "fiber = " + fiber.getName() );
 	}
 
-	Spy anotherSpy;
+	private boolean executing;
 
-	public Spy( String surname, Spy anotherSpy )
+	private Integer fiberExecution() throws SuspendExecution
 	{
-		this( surname );
-		this.anotherSpy = anotherSpy;
-	}
+		assert !executing : "already executing !";
+		if( executing )
+			throw new RuntimeException( "already executing !" );
+		executing = true;
+		
+		log( "start message loop" );
+		startUp();
 
-	private Integer fiberExecution()
-	{
 		while( true )
 		{
 			pumpMessage();
@@ -168,7 +190,7 @@ public class Spy
 	}
 
 	@Suspendable
-	private void pumpMessage()
+	private void pumpMessage() throws SuspendExecution
 	{
 		try
 		{
@@ -224,10 +246,6 @@ public class Spy
 
 			log( "finished pump loop" );
 		}
-		catch( SuspendExecution suspendExecution )
-		{
-			suspendExecution.printStackTrace();
-		}
 		catch( InterruptedException e )
 		{
 			e.printStackTrace();
@@ -258,6 +276,10 @@ public class Spy
 
 	public void start()
 	{
+		msgChannel = Channels.newChannel( -1 );
+		fiber = new Fiber<Integer>( this::fiberExecution );
+		log( "fiber = " + fiber.getName() );
+
 		fiber.start();
 	}
 }
@@ -295,6 +317,23 @@ class SpyMessage
 	@Override
 	public String toString()
 	{
-		return methodName + "(" + parameters + ")" + (responseChannel == null ? " *no_resp_channel*" : "");
+		StringBuilder res = new StringBuilder();
+		res.append( "[MESSAGE|" );
+		res.append( methodName );
+		res.append( "(" );
+		if( parameters != null )
+		{
+			for( int i = 0; i < parameters.length; i++ )
+			{
+				if( i > 0 )
+					res.append( ", " );
+				res.append( "" + parameters[i] );
+			}
+		}
+		res.append( ")" );
+		if( responseChannel == null )
+			res.append( " *no_resp_channel*" );
+		res.append( "]" );
+		return res.toString();
 	}
 }

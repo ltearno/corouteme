@@ -67,25 +67,25 @@
 						</goals>
 					</execution>
 
-					<execution>
-						<id>instrument-test-classes</id>
-						<phase>test-compile</phase>
-						<configuration>
-							<tasks>
-								<property name="ant_classpath" refid="maven.dependency.classpath" />
-								<taskdef name="instrumentationTask"
-									classname="co.paralleluniverse.fibers.instrument.InstrumentationTask"
-									classpath="${ant_classpath}" />
-								<instrumentationTask verbose="true">
-									<fileset dir="${project.build.directory}/test-classes/"
-										includes="**/*.class" />
-								</instrumentationTask>
-							</tasks>
-						</configuration>
-						<goals>
-							<goal>run</goal>
-						</goals>
-					</execution>
+<!-- 					<execution> -->
+<!-- 						<id>instrument-test-classes</id> -->
+<!-- 						<phase>test-compile</phase> -->
+<!-- 						<configuration> -->
+<!-- 							<tasks> -->
+<!-- 								<property name="ant_classpath" refid="maven.dependency.classpath" /> -->
+<!-- 								<taskdef name="instrumentationTask" -->
+<!-- 									classname="co.paralleluniverse.fibers.instrument.InstrumentationTask" -->
+<!-- 									classpath="${ant_classpath}" /> -->
+<!-- 								<instrumentationTask verbose="true"> -->
+<!-- 									<fileset dir="${project.build.directory}/test-classes/" -->
+<!-- 										includes="**/*.class" /> -->
+<!-- 								</instrumentationTask> -->
+<!-- 							</tasks> -->
+<!-- 						</configuration> -->
+<!-- 						<goals> -->
+<!-- 							<goal>run</goal> -->
+<!-- 						</goals> -->
+<!-- 					</execution> -->
 				</executions>
 			</plugin>
 			
@@ -97,7 +97,7 @@
 					<execution>
 						<goals>
 							<goal>instrument</goal>
-							<goal>test-instrument</goal>
+<!-- 							<goal>test-instrument</goal> -->
 						</goals>
 					</execution>
 				</executions>
