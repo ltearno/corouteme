@@ -25,6 +25,8 @@ import de.matthiasmann.continuations.CoroutineProto;
  */
 public abstract class Spy
 {
+	private final Object nullMessage = new Object();
+
 	private final String surname;
 
 	private Channel<SpyMessage> msgChannel;
@@ -75,22 +77,24 @@ public abstract class Spy
 			public void coExecute() throws de.matthiasmann.continuations.SuspendExecution
 			{
 				// Process the message
-				log( "Start of the continuation, processing message " + message );
+				debug( "Start of the continuation, processing message " + message );
 
 				Object result = processMessage(message, MessageProcessingContinuation.this);
 
 				// now return something to the caller
 				Channel<Object> responseChannel = message.getResponseChannel();
-				log( "Finished processing message with result '" + result + "', sending answer to " + System.identityHashCode( responseChannel ) );
+				debug( "Finished processing message with result '" + result + "', sending answer to " + System.identityHashCode( responseChannel ) );
 				try
 				{
+					if (result == null)
+						result = nullMessage;
 					responseChannel.send( result );
 				}
 				catch( Exception e )
 				{
 					e.printStackTrace();
 				}
-				log( "Finished process message, REAL" );
+				debug( "Finished process message, REAL" );
 
 				messageProcessings.remove( MessageProcessingContinuation.this );
 			}
@@ -107,24 +111,26 @@ public abstract class Spy
 			try
 			{
 				spy.msgChannel.send( new SpyMessage( methodName, parameters, waitingChannel ) );
-				log("Suspending continuation and wait on channel " + System.identityHashCode(waitingChannel));
+				debug("Suspending continuation and wait on channel " + System.identityHashCode(waitingChannel));
 
 				Coroutine.yield();
 
-				log("Continuation resumed result is = " + receivedObject);
+				debug("Continuation resumed result is = " + receivedObject);
 				Object result = receivedObject;
+				if (result == nullMessage)
+					result = null;
 
 				return result;
 			}
 			catch( SuspendExecution e )
 			{
-				log( e.getMessage() );
+				debug( e.getMessage() );
 				e.printStackTrace();
 				throw new RuntimeException( e );
 			}
 			catch( InterruptedException e )
 			{
-				log( e.getMessage() );
+				debug( e.getMessage() );
 				e.printStackTrace();
 				throw new RuntimeException( e );
 			}
@@ -139,7 +145,12 @@ public abstract class Spy
 		}
 	}
 
-	protected void log( String message )
+	protected void debug( String message )
+	{
+		// System.out.println( surname + " : " + message );
+	}
+
+	protected void log(String message)
 	{
 		System.out.println( surname + " : " + message );
 	}
@@ -158,7 +169,7 @@ public abstract class Spy
 			throw new RuntimeException( "already executing !" );
 		executing = true;
 
-		log( "start message loop" );
+		debug( "start message loop" );
 		startUp();
 
 		while( true )
@@ -176,7 +187,7 @@ public abstract class Spy
 	{
 		try
 		{
-			log( "prepare pumping" );
+			debug( "prepare pumping" );
 
 			HashMap<Integer, MessageProcessingContinuation> spyBySelect = new HashMap<>();
 
@@ -192,21 +203,21 @@ public abstract class Spy
 				spyBySelect.put( System.identityHashCode( action ), spy );
 			}
 
-			log( "SELECTING " + actions.size() + " ACTIONS" );
+			debug( "SELECTING " + actions.size() + " ACTIONS" );
 
 			SelectAction<Object> selected = Selector.select( actions );
 
 			if( selected == null )
 			{
-				log( "NOTHING SELECTED !!!" );
+				debug( "NOTHING SELECTED !!!" );
 				return;
 			}
 
-			log( "SELECTION ON CHANNEL " + System.identityHashCode( selected.port() ) );
+			debug( "SELECTION ON CHANNEL " + System.identityHashCode( selected.port() ) );
 
 			if( (Object) selected.port() == (Object) msgChannel )
 			{
-				log( "RECEIVED A MESSAGE TO PROCESS " + selected.message() );
+				debug( "RECEIVED A MESSAGE TO PROCESS " + selected.message() );
 
 				MessageProcessingContinuation messageProcessing = new MessageProcessingContinuation( (SpyMessage) selected.message() );
 				messageProcessings.add( messageProcessing );
@@ -215,12 +226,12 @@ public abstract class Spy
 			}
 			else
 			{
-				log( "FINISHED AN IO OPERATION, CONTIUING A SPY" );
+				debug( "FINISHED AN IO OPERATION, CONTIUING A SPY" );
 
 				MessageProcessingContinuation waitingmessageProcessing = spyBySelect.get( System.identityHashCode( selected ) );
 				if( waitingmessageProcessing == null )
 				{
-					log( "WEIRD SELECTED OPERATION BUT NON WAITING SPY ON IT !" );
+					debug( "WEIRD SELECTED OPERATION BUT NON WAITING SPY ON IT !" );
 					return;
 				}
 
@@ -228,7 +239,7 @@ public abstract class Spy
 				waitingmessageProcessing.step();
 			}
 
-			log( "finished pump loop" );
+			debug( "finished pump loop" );
 		}
 		catch( InterruptedException e )
 		{
@@ -262,7 +273,7 @@ public abstract class Spy
 	{
 		msgChannel = Channels.newChannel( -1 );
 		fiber = new Fiber<Integer>( this::fiberExecution );
-		log( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
+		debug( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
 
 		fiber.start();
 	}
