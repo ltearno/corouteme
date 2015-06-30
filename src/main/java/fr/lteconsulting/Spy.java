@@ -1,16 +1,10 @@
 package fr.lteconsulting;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-
 import co.paralleluniverse.fibers.Fiber;
 import co.paralleluniverse.fibers.SuspendExecution;
 import co.paralleluniverse.fibers.Suspendable;
 import co.paralleluniverse.strands.channels.Channel;
 import co.paralleluniverse.strands.channels.Channels;
-import co.paralleluniverse.strands.channels.SelectAction;
-import co.paralleluniverse.strands.channels.Selector;
 import de.matthiasmann.continuations.Coroutine;
 import de.matthiasmann.continuations.CoroutineProto;
 
@@ -29,31 +23,26 @@ public abstract class Spy
 
 	private final String surname;
 
-	private Channel<SpyMessage> msgChannel;
+	private Channel<Object> msgChannel;
 
 	private Fiber<Integer> fiber;
 
-	private final List<MessageProcessingContinuation> messageProcessings = new ArrayList<>();
-
 	abstract protected void startUp();
 
-	abstract protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
-			throws de.matthiasmann.continuations.SuspendExecution;
+	abstract protected Object processMessage( SpyCallMessage message, MessageProcessingContinuation ctx ) throws de.matthiasmann.continuations.SuspendExecution;
 
 	class MessageProcessingContinuation
 	{
-		private final SpyMessage message;
-
-		private Channel<Object> waitingChannel;
+		private final SpyCallMessage message;
 
 		private final Coroutine runner;
 
 		private Object receivedObject;
 
-		public MessageProcessingContinuation( SpyMessage message )
+		public MessageProcessingContinuation( SpyCallMessage message )
 		{
 			this.message = message;
-			this.runner = new Coroutine(coroutine);
+			this.runner = new Coroutine( coroutine );
 		}
 
 		public void step()
@@ -66,58 +55,49 @@ public abstract class Spy
 			return coroutine;
 		}
 
-		public Channel<Object> getResponseChannel()
-		{
-			return waitingChannel;
-		}
-
 		private CoroutineProto coroutine = new CoroutineProto()
 		{
 			@Override
 			public void coExecute() throws de.matthiasmann.continuations.SuspendExecution
 			{
-				// Process the message
 				debug( "Start of the continuation, processing message " + message );
 
-				Object result = processMessage(message, MessageProcessingContinuation.this);
+				Object result = processMessage( message, MessageProcessingContinuation.this );
 
 				// now return something to the caller
 				Channel<Object> responseChannel = message.getResponseChannel();
-				debug( "Finished processing message with result '" + result + "', sending answer to " + System.identityHashCode( responseChannel ) );
+				debug( "Sending result '" + result + "' on channel " + System.identityHashCode( responseChannel ) );
 				try
 				{
-					if (result == null)
+					if( result == null )
 						result = nullMessage;
-					responseChannel.send( result );
+					responseChannel.send( new SpyResponseMessage( result, message.getCookie() ) );
 				}
 				catch( Exception e )
 				{
 					e.printStackTrace();
 				}
-				debug( "Finished process message, REAL" );
-
-				messageProcessings.remove( MessageProcessingContinuation.this );
+				debug( "Finished process message" );
 			}
 		};
 
-		protected Object callSpy(Spy spy, String methodName, Object[] parameters)
-				throws de.matthiasmann.continuations.SuspendExecution
+		protected Object callSpy( Spy spy, String methodName, Object[] parameters ) throws de.matthiasmann.continuations.SuspendExecution
 		{
-			assert waitingChannel == null : "responseChannel should be null by now !";
-
 			receivedObject = null;
-			waitingChannel = Channels.newChannel( -1 );
 
 			try
 			{
-				spy.msgChannel.send( new SpyMessage( methodName, parameters, waitingChannel ) );
-				debug("Suspending continuation and wait on channel " + System.identityHashCode(waitingChannel));
+				spy.msgChannel.send( new SpyCallMessage( methodName, parameters, msgChannel, MessageProcessingContinuation.this ) );
+				debug( "Suspending continuation and wait on channel " + System.identityHashCode( msgChannel ) );
 
 				Coroutine.yield();
 
-				debug("Continuation resumed result is = " + receivedObject);
+				debug( "Continuation resumed result is = " + receivedObject );
+
 				Object result = receivedObject;
-				if (result == nullMessage)
+				receivedObject = null;
+
+				if( result == nullMessage )
 					result = null;
 
 				return result;
@@ -134,25 +114,17 @@ public abstract class Spy
 				e.printStackTrace();
 				throw new RuntimeException( e );
 			}
-			finally
-			{
-				receivedObject = null;
-				waitingChannel.close();
-				waitingChannel = null;
-			}
-
-			// return null;
 		}
 	}
 
 	protected void debug( String message )
 	{
-		// System.out.println( surname + " : " + message );
+		System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
 	}
 
-	protected void log(String message)
+	protected void log( String message )
 	{
-		System.out.println( surname + " : " + message );
+		System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
 	}
 
 	public Spy( String surname )
@@ -172,79 +144,59 @@ public abstract class Spy
 		debug( "start message loop" );
 		startUp();
 
-		while( true )
-		{
-			pumpMessage();
-		}
+		while( pumpMessage() )
+			;
 
-		// msgChannel.close();
-
-		// return 0;
+		return 0;
 	}
 
 	@Suspendable
-	private void pumpMessage() throws SuspendExecution
+	private boolean pumpMessage() throws SuspendExecution
 	{
 		try
 		{
-			debug( "prepare pumping" );
+			debug( "pumping" );
+			Object message = msgChannel.receive();
 
-			HashMap<Integer, MessageProcessingContinuation> spyBySelect = new HashMap<>();
+			MessageProcessingContinuation continuation = null;
 
-			List<SelectAction<Object>> actions = new ArrayList<>();
-			actions.add( Selector.receive( msgChannel ) );
-			for( MessageProcessingContinuation spy : messageProcessings )
+			if( message instanceof SpyCallMessage )
 			{
-				if( spy.waitingChannel == null )
-					continue;
+				SpyCallMessage callMsg = (SpyCallMessage) message;
 
-				SelectAction<Object> action = Selector.receive( spy.waitingChannel );
-				actions.add( action );
-				spyBySelect.put( System.identityHashCode( action ), spy );
+				debug( "RECEIVED A MESSAGE TO PROCESS " + callMsg );
+
+				continuation = new MessageProcessingContinuation( callMsg );
 			}
 
-			debug( "SELECTING " + actions.size() + " ACTIONS" );
-
-			SelectAction<Object> selected = Selector.select( actions );
-
-			if( selected == null )
+			else if( message instanceof SpyResponseMessage )
 			{
-				debug( "NOTHING SELECTED !!!" );
-				return;
-			}
+				SpyResponseMessage respMsg = (SpyResponseMessage) message;
 
-			debug( "SELECTION ON CHANNEL " + System.identityHashCode( selected.port() ) );
+				debug( "FINISHED AN IO OPERATION, CONTIUING A SPY " + respMsg );
 
-			if( (Object) selected.port() == (Object) msgChannel )
-			{
-				debug( "RECEIVED A MESSAGE TO PROCESS " + selected.message() );
-
-				MessageProcessingContinuation messageProcessing = new MessageProcessingContinuation( (SpyMessage) selected.message() );
-				messageProcessings.add( messageProcessing );
-
-				messageProcessing.step();
-			}
-			else
-			{
-				debug( "FINISHED AN IO OPERATION, CONTIUING A SPY" );
-
-				MessageProcessingContinuation waitingmessageProcessing = spyBySelect.get( System.identityHashCode( selected ) );
-				if( waitingmessageProcessing == null )
+				continuation = (MessageProcessingContinuation) respMsg.getCookie();
+				if( continuation == null )
 				{
-					debug( "WEIRD SELECTED OPERATION BUT NON WAITING SPY ON IT !" );
-					return;
+					debug( "Response message with no continuation associated !" );
+					return false;
 				}
 
-				waitingmessageProcessing.receivedObject = selected.message();
-				waitingmessageProcessing.step();
+				continuation.receivedObject = respMsg.getObject();
 			}
 
-			debug( "finished pump loop" );
+			if( continuation != null )
+				continuation.step();
+			else
+				log( "no continuation associated with message !" );
+			debug( "finished pumpimg" );
 		}
 		catch( InterruptedException e )
 		{
 			e.printStackTrace();
 		}
+
+		return true;
 	}
 
 	/**
@@ -254,12 +206,12 @@ public abstract class Spy
 	 * @param parameters
 	 * @return
 	 */
-	public Channel<Object> send(String methodName, Object[] parameters)
+	public Channel<Object> send( String methodName, Object[] parameters )
 	{
 		try
 		{
-			Channel<Object> c = Channels.newChannel(-1);
-			msgChannel.send( new SpyMessage( methodName, parameters, c ) );
+			Channel<Object> c = Channels.newChannel( -1 );
+			msgChannel.send( new SpyCallMessage( methodName, parameters, c, null ) );
 			return c;
 		}
 		catch( SuspendExecution | InterruptedException e )
@@ -276,59 +228,5 @@ public abstract class Spy
 		debug( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
 
 		fiber.start();
-	}
-}
-
-class SpyMessage
-{
-	private final String methodName;
-
-	private final Object[] parameters;
-
-	private final Channel<Object> responseChannel;
-
-	SpyMessage( String methodName, Object[] parameters, Channel<Object> responseChannel )
-	{
-		this.methodName = methodName;
-		this.parameters = parameters;
-		this.responseChannel = responseChannel;
-	}
-
-	public String getMethodName()
-	{
-		return methodName;
-	}
-
-	public Object[] getParameters()
-	{
-		return parameters;
-	}
-
-	public Channel<Object> getResponseChannel()
-	{
-		return responseChannel;
-	}
-
-	@Override
-	public String toString()
-	{
-		StringBuilder res = new StringBuilder();
-		res.append( "[MESSAGE|" );
-		res.append( methodName );
-		res.append( "(" );
-		if( parameters != null )
-		{
-			for( int i = 0; i < parameters.length; i++ )
-			{
-				if( i > 0 )
-					res.append( ", " );
-				res.append( "" + parameters[i] );
-			}
-		}
-		res.append( ")" );
-		if( responseChannel == null )
-			res.append( " *no_resp_channel*" );
-		res.append( "]" );
-		return res.toString();
 	}
 }

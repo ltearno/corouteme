@@ -26,7 +26,7 @@ public class App
 			}
 
 			@Override
-			protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
+			protected Object processMessage(SpyCallMessage message, MessageProcessingContinuation ctx)
 			{
 				log("received a question : " + message);
 				String res = "Don't disturb me I said, whatever the " + message;
@@ -46,7 +46,7 @@ public class App
 			}
 
 			@Override
-			protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
+			protected Object processMessage(SpyCallMessage message, MessageProcessingContinuation ctx)
 			{
 				log(message.toString());
 				return null;
@@ -67,7 +67,7 @@ public class App
 				}
 
 				@Override
-				protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
+				protected Object processMessage(SpyCallMessage message, MessageProcessingContinuation ctx)
 						throws SuspendExecution
 				{
 					dto.unreplied++;

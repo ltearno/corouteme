@@ -1,0 +1,1 @@
+mvn install:install-file -DgroupId=de.matthiasmann -DartifactId=de.matthiasmann.continuations -Dversion=1.0 -Dpackaging=jar -Dfile=Continuations_full_2013-02-17_03-52.jar -DcreateChecksum=true
