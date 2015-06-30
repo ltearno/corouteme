@@ -73,7 +73,6 @@ public class App
 					dto.unreplied++;
 					log("i've been asked about " + message.getMethodName() + ", i'm going to ask to the master");
 					Object result = ctx.callSpy(master, "askAbout", new Object[] { message.getMethodName() });
-					//Object result = spyCaller.callSpy( master, "askAbout", new Object[] { message.getMethodName() } );
 					dto.unreplied--;
 					log("master said " + result);
 
