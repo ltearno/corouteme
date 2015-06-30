@@ -24,13 +24,62 @@ public abstract class Spy
 
 	abstract protected void startUp();
 
-	abstract protected Object processMessage( SpyCallMessage message, MessageProcessingContinuation ctx ) throws de.matthiasmann.continuations.SuspendExecution;
+	abstract protected Object processMessage( SpyCallMessage message, Continuation ctx ) throws de.matthiasmann.continuations.SuspendExecution;
+
+	public Spy( String surname )
+	{
+		this.surname = surname;
+	}
+
+	public void start()
+	{
+		start( -1 );
+	}
+
+	public void start( int channelSize )
+	{
+		msgChannel = Channels.newChannel( channelSize );
+		fiber = new Fiber<Integer>( this::fiberExecution );
+		debug( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
+
+		fiber.start();
+	}
+
+	/**
+	 * TO BE CALLED BY EXTERNAL THREADS
+	 * 
+	 * @param methodName
+	 * @param parameters
+	 * @return
+	 */
+	public void send( String methodName, Object[] parameters, Channel<Object> resultChannel )
+	{
+		try
+		{
+			msgChannel.send( new SpyCallMessage( methodName, parameters, resultChannel, null ) );
+		}
+		catch( SuspendExecution | InterruptedException e )
+		{
+			e.printStackTrace();
+		}
+	}
+
+	protected void debug( String message )
+	{
+		//System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
+	}
+
+	protected void log( String message )
+	{
+		//System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
+	}
 
 	abstract class Continuation
 	{
 		private Object receivedObject;
 		private final Coroutine runner;
 
+		@Suspendable
 		abstract protected void run() throws de.matthiasmann.continuations.SuspendExecution;
 
 		protected Continuation()
@@ -43,6 +92,7 @@ public abstract class Spy
 		 * 
 		 * @return
 		 */
+		@Suspendable
 		public boolean step()
 		{
 			runner.run();
@@ -57,12 +107,14 @@ public abstract class Spy
 		private CoroutineProto coroutine = new CoroutineProto()
 		{
 			@Override
+			@Suspendable
 			public void coExecute() throws de.matthiasmann.continuations.SuspendExecution
 			{
 				run();
 			}
 		};
-		
+
+		@Suspendable
 		protected Object callSpy( Spy spy, String methodName, Object[] parameters ) throws de.matthiasmann.continuations.SuspendExecution
 		{
 			receivedObject = null;
@@ -74,9 +126,10 @@ public abstract class Spy
 
 				Coroutine.yield();
 
-				debug( "Continuation resumed result is = " + receivedObject );
-
 				Object result = receivedObject;
+
+				debug( "Continuation resumed result is = " + result );
+
 				receivedObject = null;
 
 				return result;
@@ -105,6 +158,7 @@ public abstract class Spy
 			this.message = message;
 		}
 
+		@Suspendable
 		@Override
 		protected void run() throws de.matthiasmann.continuations.SuspendExecution
 		{
@@ -114,32 +168,25 @@ public abstract class Spy
 
 			// now return something to the caller
 			Channel<Object> responseChannel = message.getResponseChannel();
-			debug( "Sending result '" + result + "' on channel " + System.identityHashCode( responseChannel ) );
-			try
+			if( responseChannel == null )
 			{
-				responseChannel.send( new SpyResponseMessage( result, message.getCookie() ) );
+				debug( "no response channel for this message !" );
 			}
-			catch( Exception e )
+			else
 			{
-				e.printStackTrace();
+				debug( "Sending result '" + result + "' on channel " + System.identityHashCode( responseChannel ) );
+				try
+				{
+					responseChannel.send( new SpyResponseMessage( result, message.getCookie() ) );
+				}
+				catch( Exception e )
+				{
+					log( e.getMessage() );
+					e.printStackTrace();
+				}
 			}
 			debug( "Finished process message" );
 		}
-	}
-
-	protected void debug( String message )
-	{
-		//System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
-	}
-
-	protected void log( String message )
-	{
-		System.out.println( "[" + Thread.currentThread().getId() + "] " + surname + " : " + message );
-	}
-
-	public Spy( String surname )
-	{
-		this.surname = surname;
 	}
 
 	private boolean executing;
@@ -160,7 +207,7 @@ public abstract class Spy
 				startUp();
 			}
 		};
-		while( ! startUpContinuation.step() )
+		while( !startUpContinuation.step() )
 			;
 
 		debug( "start message loop" );
@@ -170,7 +217,6 @@ public abstract class Spy
 		return 0;
 	}
 
-	@Suspendable
 	private boolean pumpMessage() throws SuspendExecution
 	{
 		try
@@ -217,36 +263,5 @@ public abstract class Spy
 		}
 
 		return true;
-	}
-
-	/**
-	 * TO BE CALLED BY EXTERNAL THREADS
-	 * 
-	 * @param methodName
-	 * @param parameters
-	 * @return
-	 */
-	public Channel<Object> send( String methodName, Object[] parameters )
-	{
-		try
-		{
-			Channel<Object> c = Channels.newChannel( -1 );
-			msgChannel.send( new SpyCallMessage( methodName, parameters, c, null ) );
-			return c;
-		}
-		catch( SuspendExecution | InterruptedException e )
-		{
-			e.printStackTrace();
-			return null;
-		}
-	}
-
-	public void start()
-	{
-		msgChannel = Channels.newChannel( -1 );
-		fiber = new Fiber<Integer>( this::fiberExecution );
-		debug( "fiber = " + fiber.getName() + ", channel = " + System.identityHashCode( msgChannel ) );
-
-		fiber.start();
 	}
 }
