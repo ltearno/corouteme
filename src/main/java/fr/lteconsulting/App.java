@@ -54,9 +54,7 @@ public class App
 		};
 		printer.start();
 
-		sleep( 500 );
-
-		for( int i = 0; i < 3; i++ )
+		for( int i = 0; i < 300; i++ )
 		{
 			Spy spy = new Spy( "puppet-" + i )
 			{
@@ -83,19 +81,18 @@ public class App
 			};
 			spy.start();
 
-			// spy.send( "meaning of life", null );
 			Channel<Object> receive = spy.send("meaning of life", null);
-			ThreadReceivePort<Object> rp = new ThreadReceivePort<>( receive );
-
-			try
-			{
-				Object object = rp.receive();
-				System.out.println( "====> RECEIVED " + object );
-			}
-			catch( InterruptedException e2 )
-			{
-				e2.printStackTrace();
-			}
+			
+//			ThreadReceivePort<Object> rp = new ThreadReceivePort<>( receive );
+//			try
+//			{
+//				Object object = rp.receive();
+//				System.out.println( "====> RECEIVED " + object );
+//			}
+//			catch( InterruptedException e2 )
+//			{
+//				e2.printStackTrace();
+//			}
 		}
 
 		sleep( 3000 );
