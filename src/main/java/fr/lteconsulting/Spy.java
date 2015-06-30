@@ -11,10 +11,8 @@ import co.paralleluniverse.strands.channels.Channel;
 import co.paralleluniverse.strands.channels.Channels;
 import co.paralleluniverse.strands.channels.SelectAction;
 import co.paralleluniverse.strands.channels.Selector;
-
-import com.offbynull.coroutines.user.Continuation;
-import com.offbynull.coroutines.user.Coroutine;
-import com.offbynull.coroutines.user.CoroutineRunner;
+import de.matthiasmann.continuations.Coroutine;
+import de.matthiasmann.continuations.CoroutineProto;
 
 /**
  * Spy:
@@ -37,12 +35,8 @@ public abstract class Spy
 
 	abstract protected void startUp();
 
-	abstract protected Object processMessage( SpyMessage message, SpyCaller spyCaller, Continuation continuation, MessageProcessingContinuation messageProcessingContinuation );
-
-	public interface SpyCaller
-	{
-		Object callSpy( Spy spy, String methodName, Object[] parameters );
-	}
+	abstract protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
+			throws de.matthiasmann.continuations.SuspendExecution;
 
 	class MessageProcessingContinuation
 	{
@@ -50,22 +44,22 @@ public abstract class Spy
 
 		private Channel<Object> waitingChannel;
 
-		private final CoroutineRunner runner;
+		private final Coroutine runner;
 
 		private Object receivedObject;
 
 		public MessageProcessingContinuation( SpyMessage message )
 		{
 			this.message = message;
-			this.runner = new CoroutineRunner( coroutine );
+			this.runner = new Coroutine(coroutine);
 		}
 
-		public boolean step()
+		public void step()
 		{
-			return runner.execute();
+			runner.run();
 		}
 
-		public Coroutine getCoroutine()
+		public CoroutineProto getCoroutine()
 		{
 			return coroutine;
 		}
@@ -75,28 +69,15 @@ public abstract class Spy
 			return waitingChannel;
 		}
 
-		private class SpyCallerCoroutine implements SpyCaller
-		{
-			Continuation continuation;
-
-			@Override
-			public Object callSpy( Spy spy, String methodName, Object[] parameters )
-			{
-				return MessageProcessingContinuation.this.callSpy( continuation, spy, methodName, parameters );
-			}
-		}
-
-		private Coroutine coroutine = new Coroutine()
+		private CoroutineProto coroutine = new CoroutineProto()
 		{
 			@Override
-			public void run( Continuation continuation ) throws Exception
+			public void coExecute() throws de.matthiasmann.continuations.SuspendExecution
 			{
 				// Process the message
 				log( "Start of the continuation, processing message " + message );
 
-				SpyCallerCoroutine spyCaller = new SpyCallerCoroutine();
-				spyCaller.continuation = continuation;
-				Object result = processMessage( message, spyCaller, continuation, MessageProcessingContinuation.this );
+				Object result = processMessage(message, MessageProcessingContinuation.this);
 
 				// now return something to the caller
 				Channel<Object> responseChannel = message.getResponseChannel();
@@ -115,7 +96,8 @@ public abstract class Spy
 			}
 		};
 
-		protected Object callSpy( Continuation continuation, Spy spy, String methodName, Object[] parameters )
+		protected Object callSpy(Spy spy, String methodName, Object[] parameters)
+				throws de.matthiasmann.continuations.SuspendExecution
 		{
 			assert waitingChannel == null : "responseChannel should be null by now !";
 
@@ -125,11 +107,11 @@ public abstract class Spy
 			try
 			{
 				spy.msgChannel.send( new SpyMessage( methodName, parameters, waitingChannel ) );
-				log( "Suspending continuation..." + System.identityHashCode( continuation ) + " on wait for channel " + System.identityHashCode( waitingChannel ) );
+				log("Suspending continuation and wait on channel " + System.identityHashCode(waitingChannel));
 
-				continuation.suspend();
+				Coroutine.yield();
 
-				log( "Continuation resumed" + System.identityHashCode( continuation ) + " result is = " + receivedObject );
+				log("Continuation resumed result is = " + receivedObject);
 				Object result = receivedObject;
 
 				return result;
@@ -261,11 +243,11 @@ public abstract class Spy
 	 * @param parameters
 	 * @return
 	 */
-	public Channel send( String methodName, Object[] parameters )
+	public Channel<Object> send(String methodName, Object[] parameters)
 	{
 		try
 		{
-			Channel c = Channels.newChannel( -1 );
+			Channel<Object> c = Channels.newChannel(-1);
 			msgChannel.send( new SpyMessage( methodName, parameters, c ) );
 			return c;
 		}

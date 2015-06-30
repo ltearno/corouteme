@@ -1,11 +1,8 @@
 package fr.lteconsulting;
 
-import com.offbynull.coroutines.user.Continuation;
-
 import co.paralleluniverse.strands.channels.Channel;
 import co.paralleluniverse.strands.channels.ThreadReceivePort;
-import fr.lteconsulting.Spy.MessageProcessingContinuation;
-import fr.lteconsulting.Spy.SpyCaller;
+import de.matthiasmann.continuations.SuspendExecution;
 
 /**
  * Hello world!
@@ -29,7 +26,7 @@ public class App
 			}
 
 			@Override
-			protected Object processMessage( SpyMessage message, SpyCaller spyCaller, Continuation continuation , MessageProcessingContinuation messageProcessingContinuation )
+			protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx) throws SuspendExecution
 			{
 				String res = "Don't disturb me I said, whatever the " + message;
 				return res;
@@ -69,11 +66,12 @@ public class App
 				}
 
 				@Override
-				protected Object processMessage( SpyMessage message, SpyCaller spyCaller, Continuation continuation , MessageProcessingContinuation messageProcessingContinuation )
+				protected Object processMessage(SpyMessage message, MessageProcessingContinuation ctx)
+						throws SuspendExecution
 				{
 					dto.unreplied++;
 					log( "i've been asked about " + message.getMethodName() + ", i'm going to ask to the master" );
-					Object result = messageProcessingContinuation.callSpy( continuation, master, "askAbout", new Object[] { message.getMethodName() } );
+					Object result = ctx.callSpy(master, "askAbout", new Object[] { message.getMethodName() });
 					//Object result = spyCaller.callSpy( master, "askAbout", new Object[] { message.getMethodName() } );
 					dto.unreplied--;
 					log( "master said " + result );
