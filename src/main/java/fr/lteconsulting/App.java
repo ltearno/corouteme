@@ -1,8 +1,7 @@
 package fr.lteconsulting;
 
+import co.paralleluniverse.fibers.SuspendExecution;
 import co.paralleluniverse.strands.channels.Channel;
-import co.paralleluniverse.strands.channels.ThreadReceivePort;
-import de.matthiasmann.continuations.SuspendExecution;
 
 /**
  * Hello world!
@@ -15,9 +14,9 @@ public class App
 		public int unreplied;
 	}
 
-	public static void main( String[] args )
+	public static void main(String[] args)
 	{
-		Spy master = new Spy( "master" )
+		Spy master = new Spy("master")
 		{
 			@Override
 			protected void startUp()
@@ -54,11 +53,11 @@ public class App
 		};
 		printer.start();
 
-		sleep( 500 );
+		sleep(500);
 
-		for( int i = 0; i < 3; i++ )
+		for (int i = 0; i < 300; i++)
 		{
-			Spy spy = new Spy( "puppet-" + i )
+			Spy spy = new Spy("puppet-" + i)
 			{
 				@Override
 				protected void startUp()
@@ -83,24 +82,22 @@ public class App
 			};
 			spy.start();
 
-			// spy.send( "meaning of life", null );
 			Channel<Object> receive = spy.send("meaning of life", null);
-			ThreadReceivePort<Object> rp = new ThreadReceivePort<>( receive );
-
-			try
-			{
-				Object object = rp.receive();
-				System.out.println( "====> RECEIVED " + object );
-			}
-			catch( InterruptedException e2 )
-			{
-				e2.printStackTrace();
-			}
+			// ThreadReceivePort<Object> rp = new ThreadReceivePort<>(receive);
+			// try
+			// {
+			// Object object = rp.receive();
+			// System.out.println("====> RECEIVED " + object);
+			// }
+			// catch (InterruptedException e2)
+			// {
+			// e2.printStackTrace();
+			// }
 		}
 
-		sleep( 3000 );
+		sleep(3000);
 
-		System.out.println( "The master left " + dto.unreplied + " questions unreplied..." );
+		System.out.println("The master left " + dto.unreplied + " questions unreplied...");
 
 		// spy.send( "titi", null );
 		// spy.send( "tata", null );
@@ -108,13 +105,13 @@ public class App
 		System.out.println();
 	}
 
-	private static void sleep( int ms )
+	private static void sleep(int ms)
 	{
 		try
 		{
-			Thread.sleep( ms );
+			Thread.sleep(ms);
 		}
-		catch( InterruptedException e )
+		catch (InterruptedException e)
 		{
 		}
 	}
